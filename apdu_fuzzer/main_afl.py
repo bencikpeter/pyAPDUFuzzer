@@ -198,6 +198,7 @@ def server_fuzzer(fd, lfd, args=None, **kwargs):
                     sw1 = elem.out['sw1']
                     sw2 = elem.out['sw2']
                     out = elem.out['data']
+                    power = elem.extra['power_trace'] # currently unused
 
                 statuscode = (sw1 << 8) + sw2
                 time_bin = int(test_elem.misc['timing'] // 10)
@@ -205,10 +206,11 @@ def server_fuzzer(fd, lfd, args=None, **kwargs):
                     time_bin = 0
 
                 serialized_element = elem.serialize()
+                # TODO: problem with serialization of ndarray, powertrace is not being included
                 fwd.print_to_file("%s" % json.dumps(serialized_element))
 
                 llog(fd, 'status: %04x timing: %s' % (statuscode, time_bin))
-                resp_data = bytes([0, sw1, sw2]) + bytes(time_bin.to_bytes(2, 'big')) + bytes(out)
+                resp_data = bytes([0, sw1, sw2]) + bytes(time_bin.to_bytes(2, 'big')) + bytes(out) + bytes(power)  # TODO: include powertrace better
                 llog(fd, 'resp_data: %s' % binascii.hexlify(resp_data))
 
                 s.send(resp_data)
@@ -354,6 +356,7 @@ def client_fuzzer(fd, lfd, args=None, **kwargs):
             sw2 = resp[2]
             timing = resp[3:5]
             data = resp[5:]
+            # TODO: separate power from response data
             statuscode = (sw1 << 8) + sw2
 
             llog(fd, 'status: %04x timing: %s' % (statuscode, timing))
@@ -361,6 +364,7 @@ def client_fuzzer(fd, lfd, args=None, **kwargs):
                 afl.trace_offset(hashxx(bytes([sw1, sw2])))
                 afl.trace_offset(hashxx(timing))
                 afl.trace_offset(hashxx(bytes(data)))
+                # TODO: this is fun - how to map powertrace quantification to afl bitmask correctly
 
     except Exception as e:
         llog(fd, 'Exc: %s\n' % e)

@@ -8,7 +8,8 @@ import sys
 from ..config import BLACKLIST
 from .logging import debug, info, warning, error
 from .util import raise_critical_error
-
+from .pico_interactor import PicoInteractor
+from .signal_filter import Filter
 
 class CardCrashedException(Exception):
     pass
@@ -20,6 +21,8 @@ class CardInteractor:
         self.card_reader_id = card_reader_id
         self.card_connection = None
         self.card = self.get_card()
+        self.frequency = 500000
+        self.pico = PicoInteractor(sampling_frequency=self.frequency)
 
     def get_card(self):
         if self.card_connection:
@@ -55,24 +58,33 @@ class CardInteractor:
             return element
         try:
             res = self.send_apdu(element.get_inp_data())
-            element.set_output(res[0], res[1], res[2], res[3])
+            element.set_output(res[0], res[1], res[2], res[3], res[4])
         except CardCrashedException:
             element.misc['error_status'] = 1
         return element
 
     # noinspection PyProtectedMember
     def send_apdu(self, data):
+        power = None
         timing = -1
         sw1 = 0x00
         sw2 = 0x00
         stri = "Trying : ", [hex(i) for i in data]
         debug("card.interactor", stri)
         try:
-
+            self.pico.start_measurement()
             start = time.time()
             (data, sw1, sw2) = self.card._send_apdu(data)
             end = time.time()
             timing = end - start
+            ch_a, ch_b = self.pico.get_measured_data()
+            # TODO: refactor away
+            power = Filter.butter_lowpass_filter(ch_a, 5000, self.frequency)
+            n = 100
+            power = [int(sum(power[i:i+n])//n) for i in range(0,len(power),n)]
+            power = [1000 + i for i in power]
+            ratio = 255/max(power)
+            power = [int(i * ratio) for i in power]
         except SWException as e:
             # Did we get an unsuccessful attempt?
             info("card.interactor", e)
@@ -88,5 +100,5 @@ class CardInteractor:
 
         stri = "Got : ", data, hex(sw1), hex(sw2)
         debug("card.interactor", stri)
-
-        return sw1, sw2, data, timing
+        # TODO: Somewhere here should be some quantification of powertrace data added
+        return sw1, sw2, data, timing, power

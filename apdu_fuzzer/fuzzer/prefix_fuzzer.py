@@ -65,7 +65,7 @@ class PrefixFuzzer:
         for cla in range(0xFF + 1):
             apdu_to_send = [cla, 0x00, 0x00, 0x00]
             try:
-                (sw1, sw2, data, timing) = self.card_interactor.send_apdu(apdu_to_send)
+                (sw1, sw2, data, timing, power) = self.card_interactor.send_apdu(apdu_to_send)
             except CardCrashedException as e:
                 raise_critical_error("card.interactor", e)
             # unsupported class is 0x6E00

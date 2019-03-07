@@ -49,6 +49,7 @@ class FuzzerObject:
         self.inp = {}
         self.out = {}
         self.misc = {}
+        self.extra = {}
 
         self.inp['cla'] = cla
         self.inp['ins'] = ins
@@ -64,6 +65,8 @@ class FuzzerObject:
         self.misc['timing'] = 0
         self.misc['error_status'] = 0
 
+        self.extra['power_trace'] = None
+
         self.follow_expert_rules = follow_expert_rules
 
     def set_input(self, cla, ins, p1, p2, dlen=0, data=None):
@@ -76,11 +79,12 @@ class FuzzerObject:
         self.inp['dlen'] = dlen
         self.inp['data'] = data
 
-    def set_output(self, sw1, sw2, data, timing):
+    def set_output(self, sw1, sw2, data, timing, power=None):
         self.out['sw1'] = sw1
         self.out['sw2'] = sw2
         self.out['data'] = data
         self.misc['timing'] = timing * 1000
+        self.extra['power_trace'] = power
 
     def get_inp_data(self):
         return [self.inp['cla'], self.inp['ins'], self.inp['p1'], self.inp['p2'], self.inp['dlen']] + self.inp['data']
