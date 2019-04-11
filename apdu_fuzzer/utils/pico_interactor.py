@@ -1,17 +1,21 @@
 import ctypes
+import copy
 from picosdk.ps4000 import ps4000 as ps
 from picosdk.functions import adc2mV, assert_pico_ok
+from .signal_filter import Filter
+from time import sleep
 
 
 class PicoInteractor:
 
-    def __init__(self, sampling_frequency=50000, sampling_duration=30): # duration in ms, frequency in Hz
+    def __init__(self, sampling_frequency=500000, sampling_duration=30): # duration in ms, frequency in Hz
 
         self.status = {}
         self.pico_handle = ctypes.c_int16()
 
         # Define some useful constants
         self.range_channel_A = self.range_channel_B = ps.PS4000_RANGE["PS4000_50MV"]
+        self.range_channel_B = ps.PS4000_RANGE["PS4000_10V"]
         self.channel_A = ps.PS4000_CHANNEL["PS4000_CHANNEL_A"]
         self.channel_B = ps.PS4000_CHANNEL["PS4000_CHANNEL_B"]
         self.DC_coupling = ps.PICO_COUPLING["DC"]
@@ -25,6 +29,8 @@ class PicoInteractor:
 
         self.timebase = None
         self.samples = 0
+        self.frequency = sampling_frequency
+        self.sampling_time = sampling_duration
 
         # Connect to the pico
         self.status["openunit"] = ps.ps4000OpenUnit(ctypes.byref(self.pico_handle), None)
@@ -38,41 +44,32 @@ class PicoInteractor:
                                                     self.DC_coupling, self.range_channel_B)
         assert_pico_ok(self.status["setChB"])
 
-        # should a program have a trigger??
-        # TODO: play with triggering - should some even be here?
-
         # Find sampling frequency
         self.__set_timebase(sampling_frequency, sampling_duration)
 
-        trigger_timeout = 300  # milliseconds
+        trigger_timeout = 3000  # milliseconds
         trigger_delay = 0  # sample periods
         trigger_milivolt_threshold = 6
-        trigger_adc_threshold = 1700  # ADC counts TODO actually calculate this somehow - this value si +/- allright
+        trigger_adc_threshold = 3000  # ADC counts TODO actually calculate this somehow - this value si +/- allright
         self.status["trigger"] = ps.ps4000SetSimpleTrigger(self.pico_handle, self.enabled, self.channel_A,
                                                            trigger_adc_threshold, self.rising_trigger, trigger_delay,
                                                            trigger_timeout)
         assert_pico_ok(self.status["trigger"])
 
+        self.__set_buffers()
 
-        # set buffers
-        # note - might be a performance bottleneck - maybe move allocation to __init__?
-        self.buffer_A = (ctypes.c_int16 * self.samples)()
-        self.buffer_B = (ctypes.c_int16 * self.samples)()
+    def start_measurement(self, sampling_time=0): # here just start pico measure
 
-        self.status["setBufferA"] = ps.ps4000SetDataBuffer(self.pico_handle, self.channel_A, ctypes.byref(self.buffer_A),
-                                                           self.samples)
-        assert_pico_ok(self.status["setBufferA"])
-        self.status["setBufferB"] = ps.ps4000SetDataBuffer(self.pico_handle, self.channel_B, ctypes.byref(self.buffer_B),
-                                                           self.samples)
-        assert_pico_ok(self.status["setBufferB"])
-
-    def start_measurement(self): # here just start pico measure
+        if sampling_time > self.sampling_time:
+            self.__set_timebase(self.frequency, sampling_time)
+            self.__set_buffers()
 
         measuring_time = ctypes.c_int16()  # milliseconds
-        self.status["runBlock"] = ps.ps4000RunBlock(self.pico_handle, (self.samples//8), self.samples - (self.samples//8),
+        self.status["runBlock"] = ps.ps4000RunBlock(self.pico_handle, self.pre_samples, self.post_samples,
                                                     self.timebase, self.oversample_size,
                                                     ctypes.byref(measuring_time), 0, None, None)
         assert_pico_ok(self.status["runBlock"])
+        sleep(0.05)  # important for pre-trigger sample collection - at least 5ms of idle data needed
         return measuring_time
 
     def get_measured_data(self):  # here wait for measured data
@@ -97,20 +94,50 @@ class PicoInteractor:
         channelA_mV_values = self.buffer_A # adc2mV(self.buffer_A, self.range_channel_A, self.ps4000max_values)
         channelB_mV_values = self.buffer_B # adc2mV(self.buffer_B, self.range_channel_B, self.ps4000max_values)
 
-        return channelA_mV_values, channelB_mV_values
+        return copy.copy(channelA_mV_values), copy.copy(channelB_mV_values)
 
-    def __quantify(self):
-        pass
+    def get_quantified_data(self,timing=30):
+
+        ch_a, ch_b = self.get_measured_data() # channel B currently not used
+
+        power = Filter.butter_lowpass_filter(ch_a, 5000, self.frequency)
+        power = Filter.butter_highpass_filter(power, 100, self.frequency)
+        n = 100
+        samples = timing // self.period_s
+        power = power[self.pre_samples:int(self.pre_samples + samples)]
+        power = [int(sum(power[i:i + n]) // n) for i in range(0, len(power), n)]
+        power = [1000 + i for i in power]
+        ratio = 255 / max(power)
+        power = [int(i * ratio) for i in power]
+
+        return power
+
+    def quantify(self, power_data):
+        # TODO: check if self.frequency and self.pre_samples could not be changed during measurement of the trace_set
+        return Filter.quantify(power_data, self.frequency, self.pre_samples)
+
+    def __set_buffers(self):
+        self.buffer_A = (ctypes.c_int16 * self.samples)()
+        self.buffer_B = (ctypes.c_int16 * self.samples)()
+
+        self.status["setBufferA"] = ps.ps4000SetDataBuffer(self.pico_handle, self.channel_A,
+                                                           ctypes.byref(self.buffer_A),
+                                                           self.samples)
+        assert_pico_ok(self.status["setBufferA"])
+        self.status["setBufferB"] = ps.ps4000SetDataBuffer(self.pico_handle, self.channel_B,
+                                                           ctypes.byref(self.buffer_B),
+                                                           self.samples)
+        assert_pico_ok(self.status["setBufferB"])
 
     def __set_timebase(self, frequency, duration): # frequency in Hz, duration in ms
-        period_s = 1/frequency
-        period_ns = 1000000000*period_s # perion in nanoseconds
+        self.period_s = 1/frequency
+        period_ns = 1000000000*self.period_s # perion in nanoseconds
         duration_ns = 1000000*duration
 
         if period_ns <= 50:
             raise NotImplementedError  # this is quite a high frequency, maybe not worth implementing for this usecase
         else:
-            self.timebase = round((period_s*20000000)+1)
+            self.timebase = round((self.period_s*20000000)+1)
 
         self.samples = round(duration_ns/period_ns)
 
@@ -127,6 +154,9 @@ class PicoInteractor:
 
         if maximum_samples.value < self.samples:
             self.samples = maximum_samples.value
+
+        self.pre_samples = self.samples // 4
+        self.post_samples = self.samples - self.pre_samples
 
     def __del__(self):
         self.status["stop"] = ps.ps4000Stop(self.pico_handle)

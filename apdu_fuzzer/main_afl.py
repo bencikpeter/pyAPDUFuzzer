@@ -193,6 +193,7 @@ def server_fuzzer(fd, lfd, args=None, **kwargs):
                     sw1 = 0
                     sw2 = 0
                     out = bytes()
+                    power = bytes()
                 else:
                     elem = card_interactor.send_element(test_elem)
                     sw1 = elem.out['sw1']
@@ -210,7 +211,7 @@ def server_fuzzer(fd, lfd, args=None, **kwargs):
                 fwd.print_to_file("%s" % json.dumps(serialized_element))
 
                 llog(fd, 'status: %04x timing: %s' % (statuscode, time_bin))
-                resp_data = bytes([0, sw1, sw2]) + bytes(time_bin.to_bytes(2, 'big')) + bytes(out) + bytes(power)  # TODO: include powertrace better
+                resp_data = bytes([0, sw1, sw2]) + bytes(time_bin.to_bytes(2, 'big')) + bytes(int(len(out)).to_bytes(2, 'big')) + bytes(out) + bytes(power)  # TODO: include powertrace better
                 llog(fd, 'resp_data: %s' % binascii.hexlify(resp_data))
 
                 s.send(resp_data)
@@ -355,16 +356,21 @@ def client_fuzzer(fd, lfd, args=None, **kwargs):
             sw1 = resp[1]
             sw2 = resp[2]
             timing = resp[3:5]
-            data = resp[5:]
+            data_len = int.from_bytes(resp[5:7], 'big')
+            data = resp[7:7+data_len]
+            power = resp[7+data_len:]
             # TODO: separate power from response data
             statuscode = (sw1 << 8) + sw2
 
             llog(fd, 'status: %04x timing: %s' % (statuscode, timing))
             if in_afl:
                 afl.trace_offset(hashxx(bytes([sw1, sw2])))
-                afl.trace_offset(hashxx(timing))
+                afl.trace_offset(hashxx(timing))  # TODO: do some rounding on timing - to get rid of variation by system?
                 afl.trace_offset(hashxx(bytes(data)))
                 # TODO: this is fun - how to map powertrace quantification to afl bitmask correctly
+                # this assumes every sample point on a power curve is interpreted as an endpoint of an edge
+                for point in power:
+                    afl.trace_offset(hashxx(bytes(point)))
 
     except Exception as e:
         llog(fd, 'Exc: %s\n' % e)

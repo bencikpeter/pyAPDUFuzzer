@@ -64,40 +64,45 @@ class CardInteractor:
         return element
 
     # noinspection PyProtectedMember
-    def send_apdu(self, data):
+    def send_apdu(self, input_data):
         power = None
         timing = -1
         sw1 = 0x00
         sw2 = 0x00
-        stri = "Trying : ", [hex(i) for i in data]
+        stri = "Trying : ", [hex(i) for i in input_data]
         debug("card.interactor", stri)
+        reps = 3  # how many measurements for any operation
+        power_data = {"timing": [], "power": []}
         try:
-            self.pico.start_measurement()
+            # empty run to len osciloscope know for how long to mesure
             start = time.time()
-            (data, sw1, sw2) = self.card._send_apdu(data)
+            (data, sw1, sw2) = self.card._send_apdu(input_data)
             end = time.time()
-            timing = end - start
-            ch_a, ch_b = self.pico.get_measured_data()
-            # TODO: refactor away
-            power = Filter.butter_lowpass_filter(ch_a, 5000, self.frequency)
-            n = 100
-            power = [int(sum(power[i:i+n])//n) for i in range(0,len(power),n)]
-            power = [1000 + i for i in power]
-            ratio = 255/max(power)
-            power = [int(i * ratio) for i in power]
+            calibration = end-start
+
+            for i in range(reps):
+                self.pico.start_measurement(calibration)
+                start = time.time()
+                self.card._send_apdu(input_data)
+                end = time.time()
+                power_data["timing"].append(end - start)
+                power_data["power"].append(self.pico.get_measured_data())
+
         except SWException as e:
             # Did we get an unsuccessful attempt?
             info("card.interactor", e)
         except KeyboardInterrupt:
             sys.exit()
         except smartcard.Exceptions.CardConnectionException as ex:
-            warning("card.interactor", "Reconnecting the card because of {} while processing {}".format(ex, str(data)))
+            warning("card.interactor", "Reconnecting the card because of {} while processing {}".format(ex, str(input_data)))
             self.card = self.get_card()
             raise CardCrashedException
         except Exception as e:
             warning("card.interactor", "{}:{}".format(type(e), e))
             (data, sw1, sw2) = ([], 0xFF, 0xFF)
 
+        power = self.pico.quantify(power_data)
+        timing = sum(power_data["timing"])/float(len(power_data["timing"])) # average timing of three operations
         stri = "Got : ", data, hex(sw1), hex(sw2)
         debug("card.interactor", stri)
         # TODO: Somewhere here should be some quantification of powertrace data added
