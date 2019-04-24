@@ -116,6 +116,9 @@ class Filter:
         max_delta = max(deltas)
         signal_sample = trace[0:max_delta]
 
+        # alternatively use cycles and average - did not provide any significant benefit
+        # signal_sample = [sum(x) / len(x) for x in zip(*[trace[0:max_delta], trace[max_delta:2*max_delta]])]
+
         clock_signal = signal_sample[0:deltas[0]]
         for d in deltas[1:]:
             clock_signal = np.hstack([clock_signal, signal_sample[0:d]])
@@ -324,8 +327,14 @@ class Filter:
             # power_list[j] = [median(power_list[j][i-n:i+n]) for i in range(n, len(power_list[j]), n)]
 
         # 4. Average
-        power = Filter.combine_traces_wighted_avg_median_distance_to_others(power_list)
+        # TODO: change up this to
+        # power = Filter.combine_traces_wighted_avg_median_distance_to_others(power_list)
         # power = Filter.combine_traces_avg(power_list)
+        power = Filter.combine_traces_median(power_list)
+        # power = Filter.combine_traces_wighted_avg_median_distance(power_list)
+        # power = Filter.combine_traces_wighted_avg_mean_distance(power_list)
+        # power = Filter.combine_traces_wighted_avg_mean_distance_to_others(power_list)
+
 
         # 5. Shrink to 1% size (average out every 100 samples)
         n = 100  # compression factor
@@ -352,9 +361,11 @@ class Filter:
         # power = [int((inc + i) * ratio) for i in power]
 
         # power = np.interp(np.arange(0, len(power), 100), np.arange(0, len(power)), power)
-        power_2 = copy(power)
+        # power_2 = copy(power)
         power = Filter.discretize([int(x) for x in power])
+        power_2 = copy(power)
+        power = np.interp(np.arange(0, len(power), 100), np.arange(0, len(power)), power)
         # power = [int(median(power[i - n:i + n])) for i in range(n, len(power), n)]
 
 
-        return power, power_2
+        return power
