@@ -78,7 +78,7 @@ class CardInteractor:
             start = time.time()
             (data, sw1, sw2) = self.card._send_apdu(input_data)
             end = time.time()
-            calibration = end-start
+            calibration = int(round((end-start) * 1000))
 
             for i in range(reps):
                 self.pico.start_measurement(calibration)

@@ -83,7 +83,7 @@ class FuzzerObject:
         self.out['sw1'] = sw1
         self.out['sw2'] = sw2
         self.out['data'] = data
-        self.misc['timing'] = timing * 1000
+        self.misc['timing'] = int(round(timing * 1000))
         self.extra['power_trace'] = power
 
     def get_inp_data(self):

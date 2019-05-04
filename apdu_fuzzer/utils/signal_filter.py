@@ -10,7 +10,8 @@ from fastdtw import fastdtw, dtw
 from statistics import median
 import matplotlib.pyplot as plt
 
-card_levels = [1900, 2075, 2200]
+card_levels = [-793, 200, 340, 500, 1707, 2207]# [1900, 2075, 2200]
+trimming_threshold = 250
 
 
 class Filter:
@@ -294,7 +295,7 @@ class Filter:
     @staticmethod
     def quantify(power_data, frequency, pre_samples):  # power_data = {"power":[], "timing":[]}
 
-        ripple_crop = 300  # first few samples cropped due the initial ripple after lowpass filter
+        ripple_crop = 500  # first few samples cropped due the initial ripple after lowpass filter
         power_list = copy([i[0] for i in power_data["power"]])
         clock_list = copy([i[1] for i in power_data["power"]])
         timing = power_data["timing"]
@@ -302,21 +303,38 @@ class Filter:
 
         # 1. Filter the noise
         for i in range(len(power_list)):
-            power_list[i] = Filter.butter_lowpass_filter(power_list[i], 5000, frequency)[ripple_crop:]
-            clock_list[i] = Filter.butter_lowpass_filter(clock_list[i], 5000, frequency)[ripple_crop:]
+            power_list[i] = Filter.butter_lowpass_filter(power_list[i], 2000, frequency)[ripple_crop:]
+            clock_list[i] = Filter.butter_lowpass_filter(clock_list[i], 2000, frequency)[ripple_crop:]
+
 
         # power_list = Filter.clocknoise_filter_static(power_list)
         power_list = Filter.clocknoise_filter_variable(power_list, clock_list)
         # power_list = Filter.clocknoise_filter_dynamic(power_list, clock_list)
 
-        # 3. Align and trim
+        # plt.title("filtered")
+        # plt.plot(np.linspace(0, len(power_list[0]), len(power_list[0])), power_list[0])
+        # plt.plot(np.linspace(0, len(clock_list[0]), len(clock_list[0])), clock_list[0])
+        # plt.show()
 
+        trimmed_list = []
+        # 3. Align and tri
         for i in range(len(power_list)):
-            first = next(i for i, v in enumerate(power_list[i]) if v >= 1500)
-            last = next(i for i, v in reversed(list(enumerate(power_list[i]))) if v >= 1500)
+            try:
+                first = next(i for i, v in enumerate(power_list[i]) if v >= trimming_threshold)
+                last = next(i for i, v in reversed(list(enumerate(power_list[i]))) if v >= trimming_threshold)
 
-            power_list[i] = power_list[i][first:last]
+                trimmed_list.append(power_list[i][first:last])
+            except StopIteration as e: #probably trigger misfire, mesurement is lost
+                pass
+                # plt.title("Misfire " + str(i))
+                # plt.plot(np.linspace(0,len(power_list[i]),len(power_list[i])),power_list[i])
+                # plt.show()
+                # return []
 
+
+        if len(trimmed_list) == 0:
+            return []
+        power_list = trimmed_list
         # power_list = Filter.align(power_list)
 
         for j in range(len(power_list)):

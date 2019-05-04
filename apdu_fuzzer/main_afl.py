@@ -199,7 +199,7 @@ def server_fuzzer(fd, lfd, args=None, **kwargs):
                     sw1 = elem.out['sw1']
                     sw2 = elem.out['sw2']
                     out = elem.out['data']
-                    power = elem.extra['power_trace'] # currently unused
+                    power = elem.extra['power_trace']
 
                 statuscode = (sw1 << 8) + sw2
                 time_bin = int(test_elem.misc['timing'] // 10)
@@ -211,6 +211,8 @@ def server_fuzzer(fd, lfd, args=None, **kwargs):
                 fwd.print_to_file("%s" % json.dumps(serialized_element))
 
                 llog(fd, 'status: %04x timing: %s' % (statuscode, time_bin))
+                if len(power) is 0:
+                    llog(fd, "oscilloscope trigger misfire")
                 resp_data = bytes([0, sw1, sw2]) + bytes(time_bin.to_bytes(2, 'big')) + bytes(int(len(out)).to_bytes(2, 'big')) + bytes(out) + bytes(power)  # TODO: include powertrace better
                 llog(fd, 'resp_data: %s' % binascii.hexlify(resp_data))
 
@@ -508,8 +510,8 @@ def main():
     except:
         pass
 
-    FD = fd = open(args.log_file, "w")
-    lfd = open(args.output_file, "w")
+    FD = fd = open(args.log_file, "a+")
+    lfd = open(args.output_file, "a+")
 
     llog(fd, 'init0')
     if args.server:

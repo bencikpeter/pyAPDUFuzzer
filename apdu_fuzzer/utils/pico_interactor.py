@@ -5,6 +5,7 @@ from picosdk.functions import adc2mV, assert_pico_ok
 from .signal_filter import Filter
 from time import sleep
 
+trigger_value = 4000 #ADC
 
 class PicoInteractor:
 
@@ -50,7 +51,7 @@ class PicoInteractor:
         trigger_timeout = 3000  # milliseconds
         trigger_delay = 0  # sample periods
         trigger_milivolt_threshold = 6
-        trigger_adc_threshold = 3000  # ADC counts TODO actually calculate this somehow - this value si +/- allright
+        trigger_adc_threshold = trigger_value  # ADC counts TODO actually calculate this somehow - this value si +/- allright
         self.status["trigger"] = ps.ps4000SetSimpleTrigger(self.pico_handle, self.enabled, self.channel_A,
                                                            trigger_adc_threshold, self.rising_trigger, trigger_delay,
                                                            trigger_timeout)
@@ -59,7 +60,6 @@ class PicoInteractor:
         self.__set_buffers()
 
     def start_measurement(self, sampling_time=0): # here just start pico measure
-
         if sampling_time > self.sampling_time:
             self.__set_timebase(self.frequency, sampling_time)
             self.__set_buffers()
@@ -139,7 +139,7 @@ class PicoInteractor:
         else:
             self.timebase = round((self.period_s*20000000)+1)
 
-        self.samples = round(duration_ns/period_ns)
+        self.samples = round(duration_ns/period_ns) + 20000
 
         # whats diff between samples and maximum_samples?? max can be lower if internal mem of oscilo is not enough
 
@@ -155,7 +155,7 @@ class PicoInteractor:
         if maximum_samples.value < self.samples:
             self.samples = maximum_samples.value
 
-        self.pre_samples = self.samples // 4
+        self.pre_samples = 20000
         self.post_samples = self.samples - self.pre_samples
 
     def __del__(self):
