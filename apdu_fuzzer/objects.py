@@ -97,7 +97,7 @@ class FuzzerObject:
             [self.inp['cla'], self.inp['ins'], self.inp['p1'], self.inp['p2'], self.inp['dlen']] + self.inp['data'])
 
     def serialize(self):
-        ret = {"inp": copy.deepcopy(self.inp), "out": copy.deepcopy(self.out), "misc": copy.deepcopy(self.misc)}
+        ret = {"inp": copy.deepcopy(self.inp), "out": copy.deepcopy(self.out), "misc": copy.deepcopy(self.misc), "extra": copy.deepcopy(self.extra)}
 
         status_code = self.get_status_code()
 
@@ -113,6 +113,7 @@ class FuzzerObject:
 
         ret["inp"] = self._convert_numbers_to_hex(ret["inp"])
         ret["out"] = self._convert_numbers_to_hex(ret["out"])
+        ret["extra"]["power_trace"] = ret["extra"]["power_trace"].tolist()
         return ret
 
     @staticmethod
