@@ -91,7 +91,7 @@ class PicoInteractor:
                                                       ctypes.byref(overflow))
         assert_pico_ok(self.status["getValues"])
 
-        channelA_mV_values = self.buffer_A # adc2mV(self.buffer_A, self.range_channel_A, self.ps4000max_values)
+        channelA_mV_values = self.buffer_A # adc2mV(self.buffer_A, self.range_channel_A, self.ps4000max_values) - useful but takes too much time when processng
         channelB_mV_values = self.buffer_B # adc2mV(self.buffer_B, self.range_channel_B, self.ps4000max_values)
 
         return copy.copy(channelA_mV_values), copy.copy(channelB_mV_values)

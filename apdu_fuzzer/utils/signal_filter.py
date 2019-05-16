@@ -8,7 +8,6 @@ from matplotlib.mlab import find
 from copy import copy, deepcopy
 from fastdtw import fastdtw, dtw
 from statistics import median
-import matplotlib.pyplot as plt
 
 card_levels = [-793, 200, 340, 500, 1707, 2207]# [1900, 2075, 2200]
 trimming_threshold = 250
@@ -32,7 +31,7 @@ class Filter:
     def butter_lowpass(cutoff, fs, order=5):
         nyq = 0.5 * fs
         normal_cutoff = cutoff / nyq
-        b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)  # TODO: check what analog=True does
+        b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)
         return b, a
 
     @staticmethod
@@ -44,7 +43,7 @@ class Filter:
 # -----------------------------------------------------------
     @staticmethod
     def freq_zero_crossing(
-            sig):  # TODO: credit http://qingkaikong.blogspot.com/2017/01/signal-processing-finding-periodic.html#
+            sig):
         """
         Frequency estimation from zero crossing method
         sig - input signal
@@ -52,6 +51,8 @@ class Filter:
 
         return:
         dominant period
+
+        code credit: http://qingkaikong.blogspot.com/2017/01/signal-processing-finding-periodic.html#
         """
         # Find the indices where there's a crossing
         indices = find((sig[1:] >= 0) & (sig[:-1] < 0))
@@ -145,7 +146,7 @@ class Filter:
         clean = []
         for i in range(len(traces)):
             clean.append(Filter.clocknoise_remover_dynamic(traces[i], clock_traces[i]))
-        return clean;
+        return clean
 
 
 # -----------------------------------------------------------
@@ -295,29 +296,18 @@ class Filter:
     @staticmethod
     def quantify(power_data, frequency, pre_samples):  # power_data = {"power":[], "timing":[]}
 
-        ripple_crop = 500  # first few samples cropped due the initial ripple after lowpass filter
+        ripple_crop = 500  # first few samples cropped due the initial ripple after low-pass filter
         power_list = copy([i[0] for i in power_data["power"]])
         clock_list = copy([i[1] for i in power_data["power"]])
-        timing = power_data["timing"]
-        period_s = 1 / frequency
 
         # 1. Filter the noise
         for i in range(len(power_list)):
             power_list[i] = Filter.butter_lowpass_filter(power_list[i], 2000, frequency)[ripple_crop:]
             clock_list[i] = Filter.butter_lowpass_filter(clock_list[i], 2000, frequency)[ripple_crop:]
 
-
-        # power_list = Filter.clocknoise_filter_static(power_list)
         power_list = Filter.clocknoise_filter_variable(power_list, clock_list)
-        # power_list = Filter.clocknoise_filter_dynamic(power_list, clock_list)
-
-        # plt.title("filtered")
-        # plt.plot(np.linspace(0, len(power_list[0]), len(power_list[0])), power_list[0])
-        # plt.plot(np.linspace(0, len(clock_list[0]), len(clock_list[0])), clock_list[0])
-        # plt.show()
 
         trimmed_list = []
-        # 3. Align and tri
         for i in range(len(power_list)):
             try:
                 first = next(i for i, v in enumerate(power_list[i]) if v >= trimming_threshold)
@@ -326,64 +316,16 @@ class Filter:
                 trimmed_list.append(power_list[i][first:last])
             except StopIteration as e: #probably trigger misfire, mesurement is lost
                 pass
-                # plt.title("Misfire " + str(i))
-                # plt.plot(np.linspace(0,len(power_list[i]),len(power_list[i])),power_list[i])
-                # plt.show()
-                # return []
-
 
         if len(trimmed_list) == 0:
             return []
         power_list = trimmed_list
-        # power_list = Filter.align(power_list)
 
-        for j in range(len(power_list)):
-            # power_list[j] = medfilt(power_list[j], 999)
-
-            n = 10  # compression factor
-            # power_list[j] = [int(sum(power_list[j][i - n:i + n]) // (2*n)) for i in range(n, len(power_list[j]), 2*n)]
-            # power_list[j] = [median(power_list[j][i-n:i+n]) for i in range(n, len(power_list[j]), n)]
-
-        # 4. Average
-        # TODO: change up this to
-        # power = Filter.combine_traces_wighted_avg_median_distance_to_others(power_list)
-        # power = Filter.combine_traces_avg(power_list)
         power = Filter.combine_traces_median(power_list)
-        # power = Filter.combine_traces_wighted_avg_median_distance(power_list)
-        # power = Filter.combine_traces_wighted_avg_mean_distance(power_list)
-        # power = Filter.combine_traces_wighted_avg_mean_distance_to_others(power_list)
-
-
-        # 5. Shrink to 1% size (average out every 100 samples)
-        n = 100  # compression factor
-        # power = [int(sum(power[i - n: i + n]) // (2*n)) for i in range(n, len(power), 2*n)]
-        # power = [median(power[i-n:i+n]) for i in range(n, len(power), n)]
-
-
-        # 6. Normalize to <0,16)
-        inc = 0 #  -min(power)  # TODO: change to absolute <0,16> values
-        ratio = 32 / max(power)
-        # power = [int((inc + i) * ratio) for i in power]
 
         power = medfilt(power, 501)
 
-        # Downsample
-        # power[0] = 1500
-        # power = Filter.thresholding_algo(power)["signals"]
-
-        # xp = np.arange(0, len(power), 100)
-        # nearest = interp1d(np.arange(len(power)), power, kind="nearest")
-        # power = nearest(xp)
-
-
-        # power = [int((inc + i) * ratio) for i in power]
-
-        # power = np.interp(np.arange(0, len(power), 100), np.arange(0, len(power)), power)
-        # power_2 = copy(power)
         power = Filter.discretize([int(x) for x in power])
-        power_2 = copy(power)
         power = np.interp(np.arange(0, len(power), 100), np.arange(0, len(power)), power)
-        # power = [int(median(power[i - n:i + n])) for i in range(n, len(power), n)]
-
 
         return power

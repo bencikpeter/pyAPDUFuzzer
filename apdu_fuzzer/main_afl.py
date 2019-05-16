@@ -367,11 +367,10 @@ def client_fuzzer(fd, lfd, args=None, **kwargs):
             llog(fd, 'status: %04x timing: %s' % (statuscode, timing))
             if in_afl:
                 afl.trace_offset(hashxx(bytes([sw1, sw2])))
-                afl.trace_offset(hashxx(timing))  # TODO: do some rounding on timing - to get rid of variation by system?
+                afl.trace_offset(hashxx(timing))
                 afl.trace_offset(hashxx(bytes(data)))
-                # TODO: this is fun - how to map powertrace quantification to afl bitmask correctly
-                # this assumes every sample point on a power curve is interpreted as an endpoint of an edge
-                for point in power:
+
+                for point in power:  # this assumes every sample point on a power curve is interpreted as an endpoint of an edge
                     afl.trace_offset(hashxx(bytes(point)))
 
     except Exception as e:
