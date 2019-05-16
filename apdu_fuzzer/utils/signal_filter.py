@@ -1,8 +1,6 @@
 from scipy import signal
-from scipy.interpolate import interp1d
 from scipy.signal import medfilt
 import numpy as np
-import pandas as pd
 from numba.decorators import jit
 from matplotlib.mlab import find
 from copy import copy, deepcopy
@@ -14,6 +12,11 @@ trimming_threshold = 250
 
 
 class Filter:
+    """
+    Wrapper class housing methods used for signal processing
+    """
+
+    # High and low pass filters
     @staticmethod
     def butter_highpass(cutoff, fs, order=5):
         nyq = 0.5 * fs
@@ -72,15 +75,24 @@ class Filter:
 
     @staticmethod
     def find_period(clock_trace):
+        """
+        Determines average period of the sin clock signal
+        """
         mean = np.mean(clock_trace)
         estimated_frequency, delta_crossings = Filter.freq_zero_crossing(clock_trace - mean)
         return int(round(estimated_frequency))
 
     @staticmethod
     def find_deltas(clock_trace):
+        """
+        Finds lengths of each individual period in sin clock signal
+        """
         mean = np.mean(clock_trace)
         estimated_frequency, delta_crossings = Filter.freq_zero_crossing(clock_trace - mean)
         return delta_crossings
+
+# -----------------------------------------------------------
+    # Different classes for filtering clock noise out of the signal
 
     @staticmethod
     def clocknoise_filter_static(traces, period=2389): # magic number for 500000Hz sampling frequency - setup specific
@@ -152,7 +164,10 @@ class Filter:
 # -----------------------------------------------------------
 
     @staticmethod
-    def align(traces, fast=True, radius=1): # TODO: code credit Jan J.
+    def align(traces, fast=True, radius=1):
+        """
+        FastDTW alignment of powertraces,  based on code of Jan Jančar in PYECSCA
+        """
         reference = traces[0]
         result = [deepcopy(traces[0])]
 
@@ -175,6 +190,7 @@ class Filter:
         return result
 
 # -----------------------------------------------------------
+    # different methods for combining powertraces together
 
     @staticmethod
     def combine_traces_avg(trace_list):
@@ -234,39 +250,17 @@ class Filter:
 
 
 # -----------------------------------------------------------
-    @staticmethod
-    @jit
-    def thresholding_algo(y, lag=10, threshold=30, influence=0.25):
-        signals = np.zeros(len(y))
-        filteredY = np.array(y)
-        avgFilter = np.zeros(len(y))
-        stdFilter = np.zeros(len(y))
-        avgFilter[lag - 1] = np.mean(y[0:lag])
-        stdFilter[lag - 1] = np.std(y[0:lag])
-        for i in range(lag, len(y) - 1):
-            if abs(y[i] - avgFilter[i - 1]) > threshold * stdFilter[i - 1]:
-                if y[i] > avgFilter[i - 1]:
-                    signals[i] = 1
-                else:
-                    signals[i] = -1
-
-                filteredY[i] = influence * y[i] + (1 - influence) * filteredY[i - 1]
-                avgFilter[i] = np.mean(filteredY[(i - lag):i])
-                stdFilter[i] = np.std(filteredY[(i - lag):i])
-            else:
-                signals[i] = 0
-                filteredY[i] = y[i]
-                avgFilter[i] = np.mean(filteredY[(i - lag):i])
-                stdFilter[i] = np.std(filteredY[(i - lag):i])
-
-        return dict(signals=np.asarray(signals),
-                    avgFilter=np.asarray(avgFilter),
-                    stdFilter=np.asarray(stdFilter))
-
-# -----------------------------------------------------------
 
     @staticmethod
     def create_bins(delimiters): # []
+        """
+        Divides the sample space into bins, where delimiters will be at the center. The intervals will break in the
+        middle between delimites
+
+        :param delimiters: list
+            values to be used as center point for bins
+        :return: (bins, delimiters)
+        """
         delimiters.sort()
 
         bins = [(0, (delimiters[0] + delimiters[1]) / 2)]
@@ -280,6 +274,12 @@ class Filter:
 
     @staticmethod
     def discretize(trace):
+        """
+        Replaces each value in powertrace by the value of the bin it belongs to
+
+        :param trace: powertrace to be discretized
+        :return: discretized powertrace
+        """
         bins, centers = Filter.create_bins(copy(card_levels))
 
         discretized = []
@@ -295,6 +295,15 @@ class Filter:
 
     @staticmethod
     def quantify(power_data, frequency, pre_samples):  # power_data = {"power":[], "timing":[]}
+        """
+        Processes the raw oscilloscope data into the format consumable by AFL
+
+        :param power_data: {"power":[], "timing":[]}
+            Power measurement data from oscilloscope
+        :param frequency: original sampling frequency
+        :param pre_samples: samples in trace before card became active - not used now
+        :return: Processed powertrace data directly feedable to AFL
+        """
 
         ripple_crop = 500  # first few samples cropped due the initial ripple after low-pass filter
         power_list = copy([i[0] for i in power_data["power"]])

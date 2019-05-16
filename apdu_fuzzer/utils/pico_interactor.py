@@ -7,9 +7,19 @@ from time import sleep
 
 trigger_value = 4000 #ADC
 
+
 class PicoInteractor:
+    """
+    A class used to contain functionality needed to control PicoScope 4224
+
+    """
 
     def __init__(self, sampling_frequency=500000, sampling_duration=30): # duration in ms, frequency in Hz
+        """
+
+        :param sampling_frequency: sampling frequency for the oscilloscope
+        :param sampling_duration:  sampling time for the oscilloscope
+        """
 
         self.status = {}
         self.pico_handle = ctypes.c_int16()
@@ -60,6 +70,13 @@ class PicoInteractor:
         self.__set_buffers()
 
     def start_measurement(self, sampling_time=0): # here just start pico measure
+        """
+        Starts the oscilloscope measurement
+
+        :param sampling_time: the time to be measured, if not specified time or shorter than previous
+                from previous call will be used,
+        :return: approximate time the measurment will take
+        """
         if sampling_time > self.sampling_time:
             self.__set_timebase(self.frequency, sampling_time)
             self.__set_buffers()
@@ -73,6 +90,11 @@ class PicoInteractor:
         return measuring_time
 
     def get_measured_data(self):  # here wait for measured data
+        """
+        Waits for the oscilloscope to finish measurement and provides the resulting data
+
+        :return: raw measured data from both channels
+        """
         ready = ctypes.c_int16(0)
         check = ctypes.c_int16(0)
         while ready.value == check.value:
@@ -96,7 +118,8 @@ class PicoInteractor:
 
         return copy.copy(channelA_mV_values), copy.copy(channelB_mV_values)
 
-    def get_quantified_data(self,timing=30):
+    def get_quantified_data(self, timing=30):
+        """ Deprecated function, used as a first draft of trace quantification """
 
         ch_a, ch_b = self.get_measured_data() # channel B currently not used
 
@@ -113,10 +136,19 @@ class PicoInteractor:
         return power
 
     def quantify(self, power_data):
+        """
+        Expects the collection of raw data from the oscilloscope for quantification
+        :param power_data: {"power":[], "timing":[]}
+            Power data to be quantified
+        :return: power trace vector consumable by AFL
+        """
         # TODO: check if self.frequency and self.pre_samples could not be changed during measurement of the trace_set
         return Filter.quantify(power_data, self.frequency, self.pre_samples)
 
     def __set_buffers(self):
+        """
+        Allocates and binds the buffers used to store measurement
+        """
         self.buffer_A = (ctypes.c_int16 * self.samples)()
         self.buffer_B = (ctypes.c_int16 * self.samples)()
 
@@ -130,6 +162,13 @@ class PicoInteractor:
         assert_pico_ok(self.status["setBufferB"])
 
     def __set_timebase(self, frequency, duration): # frequency in Hz, duration in ms
+        """
+        Calculates and sets the internal parameter of the oscilloscope based on sampling frequency and duration of
+        the measurement
+
+        :param frequency: sampling frequency specified for the measurement in Hz
+        :param duration: duration of the measurement in milliseconds
+        """
         self.period_s = 1/frequency
         period_ns = 1000000000*self.period_s # perion in nanoseconds
         duration_ns = 1000000*duration
@@ -159,6 +198,9 @@ class PicoInteractor:
         self.post_samples = self.samples - self.pre_samples
 
     def __del__(self):
+        """
+        Closes all open connections
+        """
         self.status["stop"] = ps.ps4000Stop(self.pico_handle)
         assert_pico_ok(self.status["stop"])
 
