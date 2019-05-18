@@ -105,5 +105,4 @@ class CardInteractor:
         timing = sum(power_data["timing"])/float(len(power_data["timing"])) # average timing of three operations
         stri = "Got : ", data, hex(sw1), hex(sw2)
         debug("card.interactor", stri)
-        # TODO: Somewhere here should be some quantification of powertrace data added
         return sw1, sw2, data, timing, power

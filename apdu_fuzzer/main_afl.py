@@ -207,13 +207,12 @@ def server_fuzzer(fd, lfd, args=None, **kwargs):
                     time_bin = 0
 
                 serialized_element = elem.serialize()
-                # TODO: problem with serialization of ndarray, powertrace is not being included
                 fwd.print_to_file("%s" % json.dumps(serialized_element))
 
                 llog(fd, 'status: %04x timing: %s' % (statuscode, time_bin))
                 if len(power) is 0:
                     llog(fd, "oscilloscope trigger misfire")
-                resp_data = bytes([0, sw1, sw2]) + bytes(time_bin.to_bytes(2, 'big')) + bytes(int(len(out)).to_bytes(2, 'big')) + bytes(out) + bytes(power)  # TODO: include powertrace better
+                resp_data = bytes([0, sw1, sw2]) + bytes(time_bin.to_bytes(2, 'big')) + bytes(int(len(out)).to_bytes(2, 'big')) + bytes(out) + bytes(power)
                 llog(fd, 'resp_data: %s' % binascii.hexlify(resp_data))
 
                 s.send(resp_data)
@@ -361,7 +360,7 @@ def client_fuzzer(fd, lfd, args=None, **kwargs):
             data_len = int.from_bytes(resp[5:7], 'big')
             data = resp[7:7+data_len]
             power = resp[7+data_len:]
-            # TODO: separate power from response data
+
             statuscode = (sw1 << 8) + sw2
 
             llog(fd, 'status: %04x timing: %s' % (statuscode, timing))
